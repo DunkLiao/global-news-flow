@@ -44,6 +44,7 @@ export interface NewsQueryParams {
 export interface NewsFetchResult {
   articles: Article[];
   totalResults: number;
+  pageSize: number;
 }
 
 /** App-level error with optional next-step hint */

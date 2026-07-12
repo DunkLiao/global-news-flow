@@ -4,6 +4,7 @@ export interface CountryOption {
 }
 
 export const COUNTRIES: CountryOption[] = [
+  { code: '', label: '不區分' },
   { code: 'us', label: '美國' },
   { code: 'tw', label: '台灣' },
   { code: 'cn', label: '中國大陸' },

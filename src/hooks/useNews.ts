@@ -14,6 +14,7 @@ export interface UseNewsReturn {
   setPage: (value: number) => void;
   articles: Article[];
   totalResults: number;
+  pageSize: number;
   loading: boolean;
   error: AppError | null;
   refetch: () => void;
@@ -22,10 +23,11 @@ export interface UseNewsReturn {
 export function useNews(): UseNewsReturn {
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState('');
-  const [country, setCountry] = useState('us');
+  const [country, setCountry] = useState('');
   const [page, setPage] = useState(1);
   const [articles, setArticles] = useState<Article[]>([]);
   const [totalResults, setTotalResults] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<AppError | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -73,6 +75,7 @@ export function useNews(): UseNewsReturn {
 
         setArticles(result.articles);
         setTotalResults(result.totalResults);
+        setPageSize(result.pageSize);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
           return;
@@ -115,6 +118,7 @@ export function useNews(): UseNewsReturn {
     setPage,
     articles,
     totalResults,
+    pageSize,
     loading,
     error,
     refetch,

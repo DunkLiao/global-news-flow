@@ -26,13 +26,13 @@
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 0.75rem;
-  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-soft) 100%);
   color: #fff;
   font-weight: 800;
   font-size: 1.15rem;
   display: grid;
   place-items: center;
-  box-shadow: 0 4px 12px rgb(79 70 229 / 0.35);
+  box-shadow: 0 4px 12px rgba(var(--primary-shadow-color), 0.35);
 }
 
 .appName {
@@ -151,15 +151,16 @@
 }
 
 .pillActive {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--pill-active-bg, var(--primary));
+  border-color: var(--pill-active-border, var(--primary));
   color: #fff;
 }
 
 .pillActive:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+  background: var(--pill-active-bg, var(--primary-hover));
+  border-color: var(--pill-active-border, var(--primary-hover));
   color: #fff;
+  filter: brightness(0.9);
 }
 
 .pill:disabled {

@@ -15,6 +15,7 @@ function App() {
     setPage,
     articles,
     totalResults,
+    pageSize,
     loading,
     error,
     refetch,
@@ -43,6 +44,7 @@ function App() {
         page={page}
         onPageChange={setPage}
         onRetry={refetch}
+        pageSize={pageSize}
       />
     </div>
   );

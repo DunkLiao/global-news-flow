@@ -1,5 +1,6 @@
 import type {
   AppError,
+  Article,
   NewsApiResponse,
   NewsFetchResult,
   NewsQueryParams,
@@ -8,7 +9,13 @@ import type {
 const NEWS_API_BASE = 'https://newsapi.org/v2';
 export const PAGE_SIZE = 20;
 
-function getApiKey(): string {
+function getApiKey(provider: string = 'newsapi'): string {
+  if (provider === 'gnews') {
+    return (import.meta.env.VITE_GNEWS_API_KEY as string | undefined)?.trim() ?? '';
+  }
+  if (provider === 'mediastack') {
+    return (import.meta.env.VITE_MEDIASTACK_API_KEY as string | undefined)?.trim() ?? '';
+  }
   return (import.meta.env.VITE_NEWS_API_KEY as string | undefined)?.trim() ?? '';
 }
 
@@ -116,13 +123,20 @@ function buildApiUrl(params: NewsQueryParams): string {
 
   // Headlines mode → /top-headlines
   const searchParams: Record<string, string> = {
-    country: params.country,
     pageSize: String(PAGE_SIZE),
     apiKey,
   };
 
   if (params.page) {
     searchParams.page = String(params.page);
+  }
+
+  if (params.country) {
+    searchParams.country = params.country;
+  } else if (!params.category) {
+    // If both country and category are missing, NewsAPI top-headlines will fail.
+    // Fallback to 'us' as a default country.
+    searchParams.country = 'us';
   }
 
   if (params.category) {
@@ -177,29 +191,60 @@ export class NewsApiError extends Error {
   }
 }
 
-/**
- * Fetch news from NewsAPI via CORS proxy.
- * - With keyword → /v2/everything
- * - Without keyword → /v2/top-headlines
- */
-export async function fetchNews(
+const GNEWS_LANGUAGES: Record<string, string> = {
+  tw: 'zh',
+  cn: 'zh',
+  jp: 'ja',
+  kr: 'ko',
+  us: 'en',
+};
+
+const MEDIASTACK_LANGUAGES: Record<string, string> = {
+  tw: 'zh',
+  cn: 'zh',
+  us: 'en',
+};
+
+
+
+async function fetchGNews(
   params: NewsQueryParams,
+  apiKey: string,
   signal?: AbortSignal,
 ): Promise<NewsFetchResult> {
-  const apiKey = getApiKey();
+  const keyword = params.keyword.trim();
+  const max = 10;
 
-  if (!apiKey) {
-    throw new NewsApiError({
-      message: '尚未設定 API Key',
-      hint: '請複製 .env.example 為 .env，填入 VITE_NEWS_API_KEY=你的金鑰，然後重新執行 npm run dev。金鑰可至 https://newsapi.org/register 免費申請。',
-    });
+  const queryParams: Record<string, string> = {
+    apikey: apiKey,
+    max: String(max),
+  };
+
+  if (params.page) {
+    queryParams.page = String(params.page);
   }
 
-  const apiUrl = buildApiUrl(params);
+  if (params.country) {
+    queryParams.country = params.country;
+    const lang = GNEWS_LANGUAGES[params.country];
+    if (lang) {
+      queryParams.lang = lang;
+    }
+  }
+
+  let endpoint = 'https://gnews.io/api/v4/top-headlines';
+  if (keyword) {
+    endpoint = 'https://gnews.io/api/v4/search';
+    queryParams.q = keyword;
+  } else if (params.category) {
+    queryParams.category = params.category;
+  }
+
+  const searchParams = new URLSearchParams(queryParams);
+  const apiUrl = `${endpoint}?${searchParams.toString()}`;
   const proxyUrl = toProxyUrl(apiUrl);
 
   let response: Response;
-
   try {
     response = await fetch(proxyUrl, {
       method: 'GET',
@@ -212,40 +257,442 @@ export async function fetchNews(
     }
     throw new NewsApiError({
       message: '連線失敗',
-      hint: '無法連線至新聞服務或 CORS 代理。請檢查網路連線，稍後再試。',
+      hint: '無法連線至 GNews 新聞服務。請檢查網路連線。',
     });
   }
 
-  let data: NewsApiResponse;
-
+  let data: any;
   try {
-    data = (await response.json()) as NewsApiResponse;
+    data = await response.json();
   } catch {
     throw new NewsApiError({
       message: response.ok ? '回應格式錯誤' : `伺服器錯誤（HTTP ${response.status}）`,
-      hint: 'CORS 代理或 NewsAPI 可能暫時不可用，請稍後再試。',
+      hint: 'CORS 代理或 GNews 可能暫時不可用，請稍後再試。',
     });
   }
 
-  if (!response.ok || data.status === 'error') {
-    const errBody = data as { code?: string; message?: string };
-    if (response.status === 429 || errBody.code === 'rateLimited') {
-      throw new NewsApiError(mapApiError('rateLimited', errBody.message));
+  if (!response.ok || data.errors) {
+    const errorMsg = Array.isArray(data.errors)
+      ? data.errors[0]
+      : typeof data.errors === 'object'
+        ? Object.values(data.errors).join(', ')
+        : 'GNews API 請求失敗';
+
+    if (response.status === 401) {
+      throw new NewsApiError({
+        message: 'GNews API Key 無效',
+        hint: '請檢查 .env 中的 VITE_GNEWS_API_KEY 是否填寫正確，並重新啟動開發伺服器。',
+      });
     }
-    if (response.status === 401 || response.status === 403) {
-      throw new NewsApiError(
-        mapApiError(errBody.code ?? 'apiKeyInvalid', errBody.message),
-      );
+    if (response.status === 403) {
+      throw new NewsApiError({
+        message: 'GNews 配額已用盡',
+        hint: 'GNews 免費方案每日請求上限為 100 次，請稍後再試。',
+      });
     }
-    throw new NewsApiError(mapApiError(errBody.code, errBody.message));
+    if (response.status === 429) {
+      throw new NewsApiError({
+        message: 'GNews 請求過於頻繁',
+        hint: '免費方案有每秒請求次數限制，請稍候再試。',
+      });
+    }
+    throw new NewsApiError({
+      message: errorMsg,
+      hint: '請檢查篩選條件或關鍵字後再試。',
+    });
   }
 
-  const articles = (data.articles ?? []).filter(
-    (a) => a && a.title && a.title !== '[Removed]',
-  );
+  const gnewsArticles = data.articles ?? [];
+  const articles: Article[] = gnewsArticles.map((art: any) => ({
+    source: {
+      id: null,
+      name: art.source?.name?.trim() || 'GNews',
+    },
+    author: null,
+    title: art.title || '',
+    description: art.description || '',
+    url: art.url || '',
+    urlToImage: art.image || null,
+    publishedAt: art.publishedAt || new Date().toISOString(),
+    content: art.content || null,
+  }));
 
   return {
     articles,
-    totalResults: data.totalResults ?? articles.length,
+    totalResults: data.totalArticles ?? articles.length,
+    pageSize: max,
+  };
+}
+
+const CN_DOMAINS = [
+  'xinhuanet.com',
+  'people.com.cn',
+  'chinanews.com',
+  'sina.com.cn',
+  'sohu.com',
+  '163.com',
+  'qq.com',
+  'ifeng.com',
+  'cctv.com',
+  'huanqiu.com',
+  'news.cn',
+  'baidu.com',
+  'toutiao.com',
+  'china.com'
+];
+
+const TW_DOMAINS = [
+  'yahoo.com',
+  'techbang.com',
+  'ithome.com.tw',
+  'technews.tw',
+  'thenewslens.com',
+  'cna.com.tw',
+  'udn.com',
+  'ltn.com.tw',
+  'chinatimes.com',
+  'setn.com',
+  'ebc.net.tw',
+  'tvbs.com.tw',
+  'storm.mg',
+  'ftvnews.com.tw',
+  'mirrorcontent.im',
+  'report.tw',
+  'cts.com.tw',
+  'ttv.com.tw',
+  'ftv.com.tw',
+  'mnews.tw'
+];
+
+async function fetchMediaStack(
+  params: NewsQueryParams,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<NewsFetchResult> {
+  const keyword = params.keyword.trim();
+  const limit = 20;
+
+  // Request a larger batch for filtering if non-US country is selected
+  const apiLimit = params.country && params.country !== 'us' ? 60 : limit;
+  const offset = ((params.page ?? 1) - 1) * apiLimit;
+
+  const queryParams: Record<string, string> = {
+    access_key: apiKey,
+    limit: String(apiLimit),
+    offset: String(offset),
+  };
+
+  // Fallback to keyword search for non-US countries because MediaStack free tier lacks regional index coverage
+  if (params.country && params.country !== 'us') {
+    const countryLabels: Record<string, string> = {
+      tw: '台灣',
+      cn: '中國',
+      jp: '日本',
+      kr: '韓國',
+    };
+    const countryLabel = countryLabels[params.country] || '';
+    
+    // Combine existing keywords with the country keyword
+    const combinedKeywords = keyword 
+      ? `${keyword} ${countryLabel}` 
+      : countryLabel;
+    
+    if (combinedKeywords) {
+      queryParams.keywords = combinedKeywords;
+    }
+
+    const lang = MEDIASTACK_LANGUAGES[params.country];
+    if (lang) {
+      queryParams.languages = lang;
+    }
+    // We do NOT set queryParams.countries to search globally
+  } else {
+    // US region or no region selected: use normal country filter
+    if (params.country) {
+      queryParams.countries = params.country;
+      const lang = MEDIASTACK_LANGUAGES[params.country];
+      if (lang) {
+        queryParams.languages = lang;
+      }
+    }
+    if (keyword) {
+      queryParams.keywords = keyword;
+    }
+  }
+
+  if (params.category) {
+    queryParams.categories = params.category;
+  }
+
+  const searchParams = new URLSearchParams(queryParams);
+  const apiUrl = `http://api.mediastack.com/v1/news?${searchParams.toString()}`;
+  const proxyUrl = toProxyUrl(apiUrl);
+
+  let response: Response;
+  try {
+    response = await fetch(proxyUrl, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw err;
+    }
+    throw new NewsApiError({
+      message: '連線失敗',
+      hint: '無法連線至 MediaStack 新聞服務。請檢查網路連線。',
+    });
+  }
+
+  let data: any;
+  try {
+    data = await response.json();
+  } catch {
+    throw new NewsApiError({
+      message: response.ok ? '回應格式錯誤' : `伺服器錯誤（HTTP ${response.status}）`,
+      hint: 'CORS 代理或 MediaStack 可能暫時不可用，請稍後再試。',
+    });
+  }
+
+  if (!response.ok || data.success === false || data.error) {
+    const errObj = data.error || {};
+    const errorCode = errObj.code || '';
+    const errorMsg = errObj.message || 'MediaStack API 請求失敗';
+
+    if (errorCode === 'invalid_access_key') {
+      throw new NewsApiError({
+        message: 'MediaStack API Key 無效',
+        hint: '請檢查 .env 中的 VITE_MEDIASTACK_API_KEY 是否填寫正確，並重新啟動開發伺服器。',
+      });
+    }
+    if (errorCode === 'usage_limit_reached') {
+      throw new NewsApiError({
+        message: 'MediaStack 配額已用盡',
+        hint: 'MediaStack 免費方案每月請求上限為 1,000 次，請稍後再試。',
+      });
+    }
+    if (errorCode === 'rate_limit_reached') {
+      throw new NewsApiError({
+        message: 'MediaStack 請求過於頻繁',
+        hint: '免費方案有請求頻率限制，請稍後再試。',
+      });
+    }
+    throw new NewsApiError({
+      message: errorMsg,
+      hint: '請調整篩選條件或關鍵字後再試。',
+    });
+  }
+
+  let mediastackArticles = data.data ?? [];
+
+  // Filter articles to clearly separate regions
+  if (params.country && params.country !== 'us') {
+    mediastackArticles = mediastackArticles.filter((art: any) => {
+      const url = (art.url || '').toLowerCase();
+      const title = art.title || '';
+      const source = (art.source || '').toLowerCase();
+
+      try {
+        const urlHost = new URL(url).hostname;
+        
+        if (params.country === 'tw') {
+          const isCnDomain = urlHost.endsWith('.cn') || CN_DOMAINS.some(d => urlHost.includes(d));
+          const isCnSource = ['新华', '人民网', '央视', '环球网', '中国新闻网', '新浪', '搜狐', '网易', '腾讯'].some(s => source.includes(s));
+          return !isCnDomain && !isCnSource;
+        }
+
+        if (params.country === 'cn') {
+          const isTwDomain = urlHost.endsWith('.tw') || TW_DOMAINS.some(d => urlHost.includes(d));
+          const isTwSource = ['中央社', '聯合新聞網', '中時', '自由時報', '東森', 'tvbs', '三立', '風傳媒', 'yahoo'].some(s => source.includes(s));
+          return !isTwDomain && !isTwSource;
+        }
+
+        if (params.country === 'jp') {
+          // Hiragana or Katakana check
+          return /[\u3040-\u309F\u30A0-\u30FF]/.test(title);
+        }
+
+        if (params.country === 'kr') {
+          // Hangul check
+          return /[\uAC00-\uD7AF]/.test(title);
+        }
+      } catch {
+        return true;
+      }
+      return true;
+    });
+  }
+
+  const articles: Article[] = mediastackArticles.slice(0, limit).map((art: any) => ({
+    source: {
+      id: null,
+      name: art.source?.trim() || 'MediaStack',
+    },
+    author: art.author || null,
+    title: art.title || '',
+    description: art.description || '',
+    url: art.url || '',
+    urlToImage: art.image || null,
+    publishedAt: art.published_at || new Date().toISOString(),
+    content: art.description || null,
+  }));
+
+  return {
+    articles,
+    totalResults: Math.min(data.pagination?.total ?? articles.length, 100),
+    pageSize: limit,
+  };
+}
+
+/**
+ * Fetch news from all configured API sources and merge results.
+ */
+export async function fetchNews(
+  params: NewsQueryParams,
+  signal?: AbortSignal,
+): Promise<NewsFetchResult> {
+  const providers = ['newsapi', 'gnews', 'mediastack'] as const;
+  
+  // Filter active providers that have configured API keys
+  const activeProviders = providers.filter(p => !!getApiKey(p));
+
+  if (activeProviders.length === 0) {
+    throw new NewsApiError({
+      message: '尚未設定任何新聞 API Key',
+      hint: '請在專案根目錄的 .env 檔案中，設定 VITE_NEWS_API_KEY、VITE_GNEWS_API_KEY 或 VITE_MEDIASTACK_API_KEY，然後重啟開發伺服器。',
+    });
+  }
+
+  // Fetch from all active providers concurrently
+  const promises = activeProviders.map(async (provider) => {
+    const apiKey = getApiKey(provider);
+    let result: NewsFetchResult;
+
+    if (provider === 'gnews') {
+      result = await fetchGNews(params, apiKey, signal);
+    } else if (provider === 'mediastack') {
+      result = await fetchMediaStack(params, apiKey, signal);
+    } else {
+      // newsapi
+      const apiUrl = buildApiUrl(params);
+      const proxyUrl = toProxyUrl(apiUrl);
+      let response: Response;
+
+      try {
+        response = await fetch(proxyUrl, {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+          signal,
+        });
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw err;
+        }
+        throw new NewsApiError({
+          message: 'NewsAPI 連線失敗',
+          hint: '無法連線至新聞服務或 CORS 代理。請檢查網路連線。',
+        });
+      }
+
+      let data: NewsApiResponse;
+      try {
+        data = (await response.json()) as NewsApiResponse;
+      } catch {
+        throw new NewsApiError({
+          message: response.ok ? '回應格式錯誤' : `伺服器錯誤（HTTP ${response.status}）`,
+          hint: 'CORS 代理或 NewsAPI 可能暫時不可用，請稍後再試。',
+        });
+      }
+
+      if (!response.ok || data.status === 'error') {
+        const errBody = data as { code?: string; message?: string };
+        if (response.status === 429 || errBody.code === 'rateLimited') {
+          throw new NewsApiError(mapApiError('rateLimited', errBody.message));
+        }
+        if (response.status === 401 || response.status === 403) {
+          throw new NewsApiError(
+            mapApiError(errBody.code ?? 'apiKeyInvalid', errBody.message),
+          );
+        }
+        throw new NewsApiError(mapApiError(errBody.code, errBody.message));
+      }
+
+      const articles = (data.articles ?? []).filter(
+        (a) => a && a.title && a.title !== '[Removed]',
+      );
+
+      result = {
+        articles,
+        totalResults: data.totalResults ?? articles.length,
+        pageSize: PAGE_SIZE,
+      };
+    }
+
+    return { provider, result };
+  });
+
+  const settledResults = await Promise.allSettled(promises);
+  
+  const successes: { provider: string; result: NewsFetchResult }[] = [];
+  const errors: { provider: string; error: any }[] = [];
+
+  for (const item of settledResults) {
+    if (item.status === 'fulfilled') {
+      successes.push(item.value);
+    } else {
+      if (item.reason instanceof DOMException && item.reason.name === 'AbortError') {
+        throw item.reason;
+      }
+      errors.push({ provider: '', error: item.reason });
+    }
+  }
+
+  // If all active providers failed, throw the primary error
+  if (successes.length === 0) {
+    const primaryError = errors[0]?.error;
+    if (primaryError instanceof NewsApiError) {
+      throw primaryError;
+    }
+    throw new NewsApiError({
+      message: '所有新聞來源皆無法取得資料',
+      hint: '請檢查網路連線或確認各 API Key 額度與設定。',
+    });
+  }
+
+  // Merge results
+  let allArticles: Article[] = [];
+  let totalResults = 0;
+  let pageSize = 0;
+
+  for (const success of successes) {
+    allArticles = allArticles.concat(success.result.articles);
+    totalResults += success.result.totalResults;
+    pageSize += success.result.pageSize;
+  }
+
+  // De-duplicate by URL
+  const seenUrls = new Set<string>();
+  const uniqueArticles = allArticles.filter(art => {
+    if (!art.url) return true;
+    const normalizedUrl = art.url.trim().toLowerCase();
+    if (seenUrls.has(normalizedUrl)) {
+      return false;
+    }
+    seenUrls.add(normalizedUrl);
+    return true;
+  });
+
+  // Sort by publishedAt DESC (newest first)
+  uniqueArticles.sort((a, b) => {
+    const timeA = new Date(a.publishedAt).getTime();
+    const timeB = new Date(b.publishedAt).getTime();
+    return timeB - timeA;
+  });
+
+  return {
+    articles: uniqueArticles,
+    totalResults,
+    pageSize,
   };
 }

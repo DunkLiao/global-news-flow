@@ -33,6 +33,8 @@ export function Sidebar({
         </div>
       </div>
 
+
+
       <div className={styles.section}>
         <label className={styles.label} htmlFor="news-search">
           搜尋新聞
@@ -82,6 +84,10 @@ export function Sidebar({
                 key={cat.id || 'all'}
                 type="button"
                 className={`${styles.pill} ${active ? styles.pillActive : ''}`}
+                style={active && cat.id ? { 
+                  '--pill-active-bg': `var(--category-${cat.id})`, 
+                  '--pill-active-border': `var(--category-${cat.id})` 
+                } as React.CSSProperties : undefined}
                 aria-pressed={active}
                 onClick={() => onCategoryChange(cat.id)}
                 disabled={isSearchMode}
@@ -113,7 +119,7 @@ export function Sidebar({
       </div>
 
       <footer className={styles.footer}>
-        <p>資料來源：NewsAPI.org</p>
+        <p>資料來源：多來源彙總 (NewsAPI, GNews, MediaStack)</p>
       </footer>
     </aside>
   );

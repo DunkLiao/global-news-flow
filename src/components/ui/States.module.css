@@ -89,8 +89,8 @@
 }
 
 .iconCircle[data-tone='error'] {
-  background: #fee2e2;
-  color: #b91c1c;
+  background: var(--accent-error-bg);
+  color: var(--accent-error);
 }
 
 .iconCircle[data-tone='muted'] {

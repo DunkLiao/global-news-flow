@@ -1,24 +1,56 @@
 :root {
-  --bg: #f8fafc;
+  /* 亮色模式 (Light Theme) */
+  --bg: #f7fafc;
   --surface: #ffffff;
-  --surface-muted: #f1f5f9;
-  --border: #e2e8f0;
-  --text: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --text-faint: #94a3b8;
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
-  --primary-soft: #a5b4fc;
-  --primary-soft-bg: #eef2ff;
+  --surface-muted: #edf2f7;
+  --border: #cbd5e0; /* 採用 border.main */
+  --border-light: #e2e8f0; /* 採用 border.light */
+  --border-dark: #a0aec0; /* 採用 border.dark */
+  --text: #1a202c; /* 採用 text.primary */
+  --text-secondary: #4a5568; /* 採用 text.secondary */
+  --text-muted: #5a6a80; /* 採用微調後的 text.hint 確保通過 AA */
+  --text-faint: #718096;
+  --text-inverse: #ffffff; /* 採用 text.inverse */
+  --primary: #2b6cb0; /* 採用 accessibility.light */
+  --primary-hover: #1a365d; /* 採用 accessibility.main */
+  --primary-soft: #90cdf4;
+  --primary-soft-bg: #ebf8ff;
+  --primary-shadow-color: 43, 108, 176;
+  
+  /* 警示與輔助色 */
+  --accent-error: #e53e3e; /* 採用 accent.breaking */
+  --accent-error-bg: #fff5f5;
+  --accent-success: #38a169; /* 採用 accent.success */
+  --accent-success-bg: #f0fff4;
+  --accent-warning: #d69e2e; /* 採用 accent.warning */
+  --accent-info: #3182ce; /* 採用 accent.info */
+  --accent-highlight: #ed8936; /* 採用 accent.highlight */
+  
+  /* 狀態色彩 */
+  --status-live: #e53e3e; /* 採用 status.live */
+  --status-updated: #38a169; /* 採用 status.updated */
+  --status-archived: #718096; /* 採用 status.archived */
+
+  /* 類別專屬配色 - 亮色模式 */
+  --category-politics: #2b6cb0;
+  --category-business: #2f855a;
+  --category-sports: #c53030;
+  --category-entertainment: #805ad5;
+  --category-technology: #319795;
+  --category-lifestyle: #dd6b20;
+  --category-opinion: #9b2c2c;
+  --category-world: #2c7a7b;
+
   --skeleton-base: #e2e8f0;
-  --skeleton-shine: #f8fafc;
-  --shadow-md: 0 10px 25px -5px rgb(15 23 42 / 0.08),
-    0 4px 10px -4px rgb(15 23 42 / 0.06);
+  --skeleton-shine: #f7fafc;
+  --shadow-md: 0 10px 25px -5px rgb(26 32 44 / 0.06),
+    0 4px 10px -4px rgb(26 32 44 / 0.04);
   --radius-md: 0.625rem;
   --radius-lg: 0.875rem;
   --sidebar-width: 280px;
-  font-family: 'Segoe UI', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei',
+
+  /* 使用推薦字型 */
+  font-family: 'Inter', 'Noto Sans TC', 'Roboto', 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei',
     system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -28,6 +60,57 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* 暗色模式 (Dark Theme) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1b2a; /* 採用 accessibility.dark */
+    --surface: #1a202c; /* 採用 background.dark */
+    --surface-muted: #2d3748; /* 採用 secondary.main */
+    --border: #2d3748;
+    --border-light: #253043;
+    --border-dark: #4a5568;
+    --text: #f7fafc;
+    --text-secondary: #e2e8f0;
+    --text-muted: #cbd5e1; /* 提升在深色背景下的對比 */
+    --text-faint: #a0aec0;
+    --text-inverse: #ffffff;
+    --primary: #4299e1; /* 調整暗色主色，確保大於 4.5:1 的對比度 */
+    --primary-hover: #3182ce;
+    --primary-soft: #2b6cb0;
+    --primary-soft-bg: #1a365d; /* 採用 accessibility.main */
+    --primary-shadow-color: 66, 153, 225;
+    
+    /* 深色模式下的警示與輔助色 */
+    --accent-error: #fc8181;
+    --accent-error-bg: #2d1a1a;
+    --accent-success: #68d391;
+    --accent-success-bg: #1a2e22;
+    --accent-warning: #ecc94b;
+    --accent-info: #63b3ed;
+    --accent-highlight: #f6ad55;
+    
+    /* 狀態色暗色版本 */
+    --status-live: #fc8181;
+    --status-updated: #68d391;
+    --status-archived: #a0aec0;
+
+    /* 類別專屬配色 - 暗色模式 (微調亮以利對比) */
+    --category-politics: #4299e1;
+    --category-business: #48bb78;
+    --category-sports: #f56565;
+    --category-entertainment: #9f7aea;
+    --category-technology: #38b2ac;
+    --category-lifestyle: #ed8936;
+    --category-opinion: #e57373;
+    --category-world: #4db6ac;
+
+    --skeleton-base: #2d3748;
+    --skeleton-shine: #1a202c;
+    --shadow-md: 0 10px 25px -5px rgb(0 0 0 / 0.35),
+      0 4px 10px -4px rgb(0 0 0 / 0.25);
+  }
 }
 
 *,
