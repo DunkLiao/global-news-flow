@@ -1,7 +1,5 @@
 import type { Article, NewsFetchResult, NewsQueryParams } from '../types/news';
 
-const RSS_PAGE_SIZE = 20;
-
 interface RssSourceConfig {
   id: string;
   name: string;
@@ -176,8 +174,8 @@ export async function fetchRssNews(
   });
 
   return {
-    articles: articles.slice(0, RSS_PAGE_SIZE),
+    articles,
     totalResults: articles.length,
-    pageSize: RSS_PAGE_SIZE,
+    pageSize: articles.length,
   };
 }

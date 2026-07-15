@@ -9,6 +9,7 @@ import { fetchRssNews } from './rssNews';
 
 const NEWS_API_BASE = 'https://newsapi.org/v2';
 export const PAGE_SIZE = 20;
+export const MAX_RESULTS = 100;
 
 function getApiKey(provider: string = 'newsapi'): string {
   if (provider === 'gnews') {
@@ -80,12 +81,9 @@ function buildApiUrl(params: NewsQueryParams): string {
     const searchParams: Record<string, string> = {
       q: keyword,
       sortBy: 'publishedAt',
-      pageSize: String(PAGE_SIZE),
+      pageSize: String(MAX_RESULTS),
       apiKey,
     };
-    if (params.page) {
-      searchParams.page = String(params.page);
-    }
     const search = new URLSearchParams(searchParams);
     return `${NEWS_API_BASE}/everything?${search.toString()}`;
   }
@@ -99,13 +97,9 @@ function buildApiUrl(params: NewsQueryParams): string {
     const searchParams: Record<string, string> = {
       q,
       sortBy: 'publishedAt',
-      pageSize: String(PAGE_SIZE),
+      pageSize: String(MAX_RESULTS),
       apiKey,
     };
-
-    if (params.page) {
-      searchParams.page = String(params.page);
-    }
 
     // Limit language to Chinese for tw and cn to filter out English/foreign-language news
     const lang = COUNTRY_LANGUAGES[params.country];
@@ -124,13 +118,9 @@ function buildApiUrl(params: NewsQueryParams): string {
 
   // Headlines mode → /top-headlines
   const searchParams: Record<string, string> = {
-    pageSize: String(PAGE_SIZE),
+    pageSize: String(MAX_RESULTS),
     apiKey,
   };
-
-  if (params.page) {
-    searchParams.page = String(params.page);
-  }
 
   if (params.country) {
     searchParams.country = params.country;
@@ -220,10 +210,6 @@ async function fetchGNews(
     apikey: apiKey,
     max: String(max),
   };
-
-  if (params.page) {
-    queryParams.page = String(params.page);
-  }
 
   if (params.country) {
     queryParams.country = params.country;
@@ -375,12 +361,11 @@ async function fetchMediaStack(
 
   // Request a larger batch for filtering if non-US country is selected
   const apiLimit = params.country && params.country !== 'us' ? 60 : limit;
-  const offset = ((params.page ?? 1) - 1) * apiLimit;
 
   const queryParams: Record<string, string> = {
     access_key: apiKey,
     limit: String(apiLimit),
-    offset: String(offset),
+    offset: '0',
   };
 
   // Fallback to keyword search for non-US countries because MediaStack free tier lacks regional index coverage
@@ -525,7 +510,7 @@ async function fetchMediaStack(
     });
   }
 
-  const articles: Article[] = mediastackArticles.slice(0, limit).map((art: any) => ({
+  const articles: Article[] = mediastackArticles.slice(0, apiLimit).map((art: any) => ({
     source: {
       id: null,
       name: art.source?.trim() || 'MediaStack',
@@ -661,22 +646,28 @@ export async function fetchNews(
 
   // Merge results
   let allArticles: Article[] = [];
-  let totalResults = 0;
-  let pageSize = 0;
-
   for (const success of successes) {
     allArticles = allArticles.concat(success.result.articles);
-    totalResults += success.result.totalResults;
-    pageSize += success.result.pageSize;
   }
 
   const uniqueArticles = dedupeAndSortArticles(allArticles);
+  const cappedArticles = uniqueArticles.slice(0, MAX_RESULTS);
 
   return {
-    articles: uniqueArticles,
-    totalResults,
-    pageSize,
+    articles: paginateArticles(cappedArticles, params.page),
+    totalResults: cappedArticles.length,
+    pageSize: PAGE_SIZE,
   };
+}
+
+export function paginateArticles(
+  articles: Article[],
+  page: number | undefined,
+  pageSize: number = PAGE_SIZE,
+): Article[] {
+  const safePage = Math.max(1, page ?? 1);
+  const start = (safePage - 1) * pageSize;
+  return articles.slice(start, start + pageSize);
 }
 
 export function dedupeAndSortArticles(articles: Article[]): Article[] {
