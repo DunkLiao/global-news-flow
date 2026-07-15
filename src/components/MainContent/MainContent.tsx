@@ -38,7 +38,7 @@ export function MainContent({
     ? `搜尋「${trimmedKeyword}」`
     : getCategoryLabel(category);
 
-  // NewsAPI/GNews/MediaStack developer plan or pagination limit is restricted to 100 results deep.
+  // API free plans and merged RSS results are capped to keep pagination predictable.
   const maxResults = Math.min(totalResults, 100);
   const totalPages = Math.ceil(maxResults / pageSize);
 

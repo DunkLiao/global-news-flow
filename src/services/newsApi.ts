@@ -5,6 +5,7 @@ import type {
   NewsFetchResult,
   NewsQueryParams,
 } from '../types/news';
+import { fetchRssNews } from './rssNews';
 
 const NEWS_API_BASE = 'https://newsapi.org/v2';
 export const PAGE_SIZE = 20;
@@ -557,15 +558,8 @@ export async function fetchNews(
   // Filter active providers that have configured API keys
   const activeProviders = providers.filter(p => !!getApiKey(p));
 
-  if (activeProviders.length === 0) {
-    throw new NewsApiError({
-      message: '尚未設定任何新聞 API Key',
-      hint: '請在專案根目錄的 .env 檔案中，設定 VITE_NEWS_API_KEY、VITE_GNEWS_API_KEY 或 VITE_MEDIASTACK_API_KEY，然後重啟開發伺服器。',
-    });
-  }
-
   // Fetch from all active providers concurrently
-  const promises = activeProviders.map(async (provider) => {
+  const apiPromises = activeProviders.map(async (provider) => {
     const apiKey = getApiKey(provider);
     let result: NewsFetchResult;
 
@@ -632,6 +626,11 @@ export async function fetchNews(
     return { provider, result };
   });
 
+  const promises: Promise<{ provider: string; result: NewsFetchResult }>[] = [
+    ...apiPromises,
+    fetchRssNews(params, signal).then((result) => ({ provider: 'rss', result })),
+  ];
+
   const settledResults = await Promise.allSettled(promises);
   
   const successes: { provider: string; result: NewsFetchResult }[] = [];
@@ -656,7 +655,7 @@ export async function fetchNews(
     }
     throw new NewsApiError({
       message: '所有新聞來源皆無法取得資料',
-      hint: '請檢查網路連線或確認各 API Key 額度與設定。',
+      hint: '請檢查網路連線、RSS 來源可用性，或確認各 API Key 額度與設定。',
     });
   }
 
@@ -671,9 +670,18 @@ export async function fetchNews(
     pageSize += success.result.pageSize;
   }
 
-  // De-duplicate by URL
+  const uniqueArticles = dedupeAndSortArticles(allArticles);
+
+  return {
+    articles: uniqueArticles,
+    totalResults,
+    pageSize,
+  };
+}
+
+export function dedupeAndSortArticles(articles: Article[]): Article[] {
   const seenUrls = new Set<string>();
-  const uniqueArticles = allArticles.filter(art => {
+  const uniqueArticles = articles.filter(art => {
     if (!art.url) return true;
     const normalizedUrl = art.url.trim().toLowerCase();
     if (seenUrls.has(normalizedUrl)) {
@@ -690,9 +698,5 @@ export async function fetchNews(
     return timeB - timeA;
   });
 
-  return {
-    articles: uniqueArticles,
-    totalResults,
-    pageSize,
-  };
+  return uniqueArticles;
 }

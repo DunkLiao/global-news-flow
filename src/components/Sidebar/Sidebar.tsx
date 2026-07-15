@@ -119,7 +119,7 @@ export function Sidebar({
       </div>
 
       <footer className={styles.footer}>
-        <p>資料來源：多來源彙總 (NewsAPI, GNews, MediaStack)</p>
+        <p>資料來源：RSS + 多來源 API 彙總</p>
       </footer>
     </aside>
   );
